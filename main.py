@@ -50,6 +50,60 @@ def extraer_sueldos(pdf_path):
         print("Error al procesar PDF:", e)
         return None, None
 
+def calcular_bloques_forzado(pdf_path):
+    CODIGOS_BRUTO = {"20", "30", "40", "97", "103", "280", "281", "330", "350"}
+    CODIGOS_DEDUCCIONES = {"7000", "7005", "7010", "8005"}
+
+    try:
+        doc = fitz.open(pdf_path)
+        text = ""
+        for page in doc:
+            text += page.get_text()
+
+        lines = text.splitlines()
+
+        # Mostrar log de líneas analizadas
+        print("[Texto procesado para extracción de sueldos]:")
+        for line in lines:
+            print(line)
+
+        bruto = 0.0
+        deducciones = 0.0
+        detectados = []
+
+        i = 0
+        while i < len(lines) - 2:
+            linea_codigo = lines[i].strip()
+            linea_valor = lines[i + 2].strip()
+
+            # Extraer código desde primeros dígitos
+            codigo = linea_codigo.split(" ")[0].strip()
+
+            if codigo.isdigit() and re.match(r'^-?\d{1,3}(?:\.\d{3})*,\d{2}$', linea_valor):
+                valor = float(linea_valor.replace('.', '').replace(',', '.'))
+
+                tipo = ""
+                if codigo in CODIGOS_BRUTO:
+                    bruto += valor
+                    tipo = "REM"
+                elif codigo in CODIGOS_DEDUCCIONES:
+                    deducciones += valor
+                    tipo = "DED"
+
+                if tipo:
+                    detectados.append((codigo, valor, tipo, linea_codigo))
+
+                i += 3
+            else:
+                i += 1
+
+        neto = bruto - deducciones
+        return round(bruto, 2), round(deducciones, 2), round(neto, 2), detectados
+    
+    except Exception as e:
+        print("Error al procesar PDF:", e)
+        return None, None
+
 
 def calcular_cuota(monto, cuotas, tasa_anual):
     tasa_mensual = (tasa_anual / 100) / 12
@@ -85,7 +139,10 @@ def generar_cuadro_amortizacion(monto, cuotas, tasa_anual):
 def cargar_pdf():
     file_path = filedialog.askopenfilename(filetypes=[("PDF files", "*.pdf")])
     if file_path:
-        bruto, neto = extraer_sueldos(file_path)
+        #bruto, neto = extraer_sueldos(file_path)
+        bruto, _, neto, _ = calcular_bloques_forzado(file_path)
+
+
         entry_bruto.config(state="normal")
         entry_neto.config(state="normal")
         entry_bruto.delete(0, tk.END)
